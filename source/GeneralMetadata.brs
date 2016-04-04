@@ -22,6 +22,7 @@ Function getPublicUserProfiles(serverUrl as String) As Object
         jsonObj       = ParseJSON(response)
 
         if jsonObj = invalid
+	    createDialog("JSON Error!", "Error while parsing JSON response for All User Profiles", "OK", true)
             Debug("Error while parsing JSON response for All User Profiles")
             return invalid
         end if
@@ -34,6 +35,7 @@ Function getPublicUserProfiles(serverUrl as String) As Object
 
         return contentList
     else
+	createDialog("User Profile Error!", "Failed To Get All User Profiles.", "OK", true)
         Debug("Failed To Get All User Profiles")
     end if
 
@@ -61,6 +63,7 @@ Function getUserProfile(userId As String) As Object
         i = ParseJSON(response)
 
         if i = invalid
+	    createDialog("JSON Error!", "Error Parsing User Profile", "OK", true)
             Debug("Error Parsing User Profile")
             return invalid
         end if
@@ -68,6 +71,7 @@ Function getUserProfile(userId As String) As Object
 
         return metaData
     else
+	createDialog("User Profile Error!", "Failed To Get User Profile.", "OK", true)
         Debug("Failed To Get User Profile")
     end if
 
@@ -124,8 +128,9 @@ Function getAlphabetList(contentType As String, parentId = invalid) As Object
         letterButton = {
             Id: cLetter
             ContentType: contentType
-            Title: "Letter " + UCase(cLetter)
+            Title: "Begins with " + UCase(cLetter)
             ShortDescriptionLine1: " "
+	    Description: "Show content beginning with the letter "+UCase(cLetter)
             HDPosterUrl: GetViewController().getThemeImageUrl("letter_" + cLetter + ".jpg")
             SDPosterUrl: GetViewController().getThemeImageUrl("letter_" + cLetter + ".jpg")
         }
@@ -156,31 +161,30 @@ Function parseItemsResponse(response as String, imageType as Integer, primaryIma
         contentList = CreateObject("roArray", 25, true)
         jsonObj     = ParseJSON(fixedResponse)
 
-        if jsonObj = invalid
+        if jsonObj = invalid or jsonObj.count() = 0
+	    createDialog("JSON Error!", "Error while parsing JSON response", "OK", true)
             Debug("Error while parsing JSON response")
             return invalid
         end if
 
-        totalRecordCount = jsonObj.TotalRecordCount
-
-		style = primaryImageStyle
+	totalRecordCount = jsonObj.TotalRecordCount
 
         for each i in jsonObj.Items
-            
-			metaData = getMetadataFromServerItem(i, imageType, primaryImageStyle, mode)
-
-            contentList.push( metaData )
+		metaData = getMetadataFromServerItem(i, imageType, primaryImageStyle, mode)
+		contentList.push( metaData )
         end for
 
         return {
             Items: contentList
             TotalCount: totalRecordCount
         }
-		
+
+    else	
+	createDialog("Parse Response Error!", "Error getting folder items.", "OK", true)
+	Debug("Error getting folder items.")
     end if
 
-	Debug("Error getting folder items.")
-    return invalid
+	return invalid
 End Function
 
 Function getMetadataFromServerItem(i as Object, imageType as Integer, primaryImageStyle as String, mode ="" as String) As Object
@@ -265,10 +269,35 @@ Function getMetadataFromServerItem(i as Object, imageType as Integer, primaryIma
     if with = 1 then
 	description = ""
         if i.MediaSources <> invalid and i.MediaSources.Count() > 0 then
-            mediaName = i.MediaSources[0]
-	    
-            if MediaName.Name <> invalid and MediaName.Name <> "" and i.LocationType <> invalid and i.LocationType <> "Remote" then
-                description = "* " + mediaName.Name
+	    mediaName = i.MediaSources[0]
+            if mediaName <> invalid and MediaName.Name <> invalid and MediaName.Name <> "" then
+		for count = 0 to i.MediaSources[0].count()-1
+	    		MediaVideo = MediaName.MediaStreams[count]
+			if MediaVideo <> invalid and (MediaVideo.AverageFrameRate <> invalid or MediaVideo.RealFrameRate <> invalid)
+				exit for
+			end if
+		end for
+		if MediaVideo <> invalid then
+			fr = ""
+			if MediaVideo.AverageFrameRate <> invalid
+				fr = tostr(MediaVideo.AverageFrameRate)
+			elseif MediaVideo.RealFrameRate <> invalid
+				fr = tostr(MediaVideo.RealFrameRate)
+			end if
+			if fr <> "" then
+				if left(fr,1) = " " then fr = right(fr, fr.len() -1)
+				if fr.len() > 6 then
+					fr = left(fr,6)
+				end if
+				description = fr + "/"
+			end if
+		end if
+	    end if
+            if mediaName <> invalid and MediaName.Name <> invalid and MediaName.Name <> "" and i.LocationType <> invalid and i.LocationType <> "Remote" then
+		if description = "" then
+			description = "* "
+		end if
+                description = description + mediaName.Name
 	        if MediaName.Container <> invalid then
 		    	description =  description + " (" + mediaName.Container + ") "
 		end if
@@ -284,7 +313,9 @@ Function getMetadataFromServerItem(i as Object, imageType as Integer, primaryIma
     end if
 
     if description <> ""
+	metaData.FullDescription = getDescription(i, mode)
         metaData.Description = description
+	metaData.Overview = description
     end if
 
 
@@ -319,13 +350,13 @@ Function getMetadataFromServerItem(i as Object, imageType as Integer, primaryIma
 	
 	' Most people won't care about the exact release date of some types
 	if i.Type = "Episode" then
-        if releaseDate<> invalid
-            metaData.ReleaseDate = formatDateStamp(releaseDate)
-        end if
+		if releaseDate<> invalid
+			metaData.ReleaseDate = formatDateStamp(releaseDate)
+		end if
 	else
-        if releaseDate <> invalid
-            metaData.ReleaseDate = left(releaseDate, 4)
-        end if
+		if releaseDate <> invalid
+			metaData.ReleaseDate = left(releaseDate, 10)
+		end if
 	end If
 
     if i.RecursiveItemCount <> invalid
@@ -351,7 +382,7 @@ Function getMetadataFromServerItem(i as Object, imageType as Integer, primaryIma
 			
         PlayedPercentage = i.PlayedPercentage
 				
-    else if i.UserData.PlaybackPositionTicks <> "" And i.UserData.PlaybackPositionTicks <> invalid
+    else if i.UserData.PlaybackPositionTicks <> invalid and i.UserData.PlaybackPositionTicks <> ""
 			
         if i.RunTimeTicks <> "" And i.RunTimeTicks <> invalid
             currentPosition = Int(((i.UserData.PlaybackPositionTicks).ToFloat() / 10000) / 1000)
@@ -561,13 +592,13 @@ Function getMetadataFromServerItem(i as Object, imageType as Integer, primaryIma
 	metaData.Categories = CreateObject("roArray", 3, true)
 	if i.SeriesStudio <> invalid then metadata.Categories.Push(i.SeriesStudio)
 	local = CreateObject("roDateTime")
-	if metaData.ReleaseDate <> Invalid and metaData.ReleaseDate <> "" then
+	    if metaData.ReleaseDate <> Invalid and metaData.ReleaseDate <> "" then
 		stamp = metaData.ReleaseDate + " 00:00:00"
 		local.FromISO8601String(stamp)
 	    	out = local.GetWeekday()
 	    	if i.AirTime <> invalid and i.AirTime <> "" then out = out + " @ " + i.AirTime
 	    	metadata.Categories.Push(out)
-	end if
+	    end if
 
 	else
 		FillActorsFromItem(metaData, i)
@@ -601,13 +632,14 @@ Function getMetadataFromServerItem(i as Object, imageType as Integer, primaryIma
 End Function
 
 Function WatchedLast(i as Object,description as String) as String
-	if i.UserData.PlayCount <> invalid then
+	if i.userData <> invalid
+	  if i.UserData.PlayCount <> invalid then
 		if description <> ""
 			description = description + " / "
 		end if
 		description = description + "Played " + tostr(i.UserData.PlayCount) +"x"
-	end if
-	if i.UserData.LastPlayedDate <> invalid then
+	  end if
+	  if i.UserData.LastPlayedDate <> invalid then
 		if description <> ""
 			description = description + " / "
  		end if
@@ -619,7 +651,8 @@ Function WatchedLast(i as Object,description as String) as String
 		local.ToLocalTime()
 		out = local.ToISOString()
 		t = GetTimeString(local,0)
-		description = description + "Last on " + left(out, 10) + " at " + t
+		description = description + "Last " + left(out, 10) + " at " + t
+	  end if
 	end if
 	return description
 End Function
@@ -722,7 +755,7 @@ Sub FillUserDataFromItem(metaData as Object, item as Object)
 
 	if item.UserData = invalid then return
 	
-    if item.UserData.PlaybackPositionTicks <> "" And item.UserData.PlaybackPositionTicks <> invalid
+    if item.UserData.PlaybackPositionTicks <> invalid and item.UserData.PlaybackPositionTicks <> ""
         positionSeconds = Int(((item.UserData.PlaybackPositionTicks).ToFloat() / 10000) / 1000)
         metaData.BookmarkPosition = positionSeconds
     else
@@ -809,19 +842,29 @@ Function getProgramDisplayTime(dateString As String) As String
 End Function
 
 Function getContentType(i as Object, mode as String) as String
-
 	if i.Type = "CollectionFolder" Then
-
 		return "MediaFolder"
-
 	else if i.Type = "Genre" and mode = "moviegenre"
 		return "MovieGenre"
-
 	else if i.Type = "Genre" and mode = "tvgenre"
 		return "TvGenre"
-
+	else if i.Type = "Genre" and mode = "musicgenre"
+		return "MusicGenre"
+	else if i.Type = "Studio" and mode = "tvstudio"
+		return "TvStudio"
+	else if i.Type = "Studio" and mode = "moviestudio"
+		return "MovieStudio"
+	else if i.Type = "Studio" and mode = "musicstudio"
+		return "MusicStudio"
+	else if i.Type = "Audio" and mode = "musicfavorite"
+		return "MusicFavorite"
+	else if i.type = "Audio" and mode = "RecentlyPlayed"
+		return "RecentlyPlayed"
+	else if i.type = "Audio" and mode = "MostPlayed"
+		return "MostPlayed"
+	else if mode = "localtrailers"
+		return "LocalTrailers"
 	end If
-
 	return i.Type
 
 End Function
@@ -954,19 +997,41 @@ Function getShortDescriptionLine2(i as Object, mode as String) as String
 		sea = ""
 		if i.RunTimeTicks <> invalid and i.RunTimeTicks <> ""
             		textTime = formatTime(Int(((i.RunTimeTicks).ToFloat() / 10000) / 1000))
+			shortrun = FirstOf(RegRead("prefAbbreviate"), "no")
+			if shortrun = "yes" then
+				r = CreateObject("roRegex","(\d+):(\d+):(\d+)","")
+				match = r.match(textTime)
+				if match.count() > 0 then
+					hour = match[1]
+					mi = match[2]
+				else
+					r = CreateObject("roRegex","(\d+):(\d+)","")
+					match = r.match(textTime)
+					if match.count() > 0 then
+						hour = 0
+						mi = match[1]
+					else
+						hour = 0
+						mi = 0
+					end if
+				end if
+				textTime = ""
+				if tostr(hour) <> "0" then textTime = textTime + tostr(hour)+"h"
+				if tostr(mi) <> "0" then textTime = textTime + tostr(mi)+"m"
+			end if
 			text = text + textTime + " / "
 		else if i.LocationType <> invalid then
 			if i.LocationType = "Virtual" then
 				text = text + m.VirtualType
 			end if
 		end if
-		if i.ParentIndexNumber <> invalid then sea = sea + "s" + ZeroPad(tostr(i.ParentIndexNumber))
+		if i.ParentIndexNumber <> invalid then sea = sea + tostr(i.ParentIndexNumber)
 
 		if i.IndexNumber <> invalid then
-			sea = sea + "e" + ZeroPad(tostr(i.IndexNumber),2)
+			sea = sea + "x" + tostr(i.IndexNumber)
 			' Add Double Episode Number
 			if i.IndexNumberEnd <> invalid
-				sea = sea + "-" + "e" + ZeroPad(tostr(i.IndexNumberEnd),2)
+				sea = sea + "-" + tostr(i.IndexNumberEnd)
             		end if
 		end if
 		if sea <> "" then
@@ -1036,19 +1101,54 @@ Function getShortDescriptionLine2(i as Object, mode as String) as String
 		videoLine = ""
 		if i.RunTimeTicks <> invalid and i.RunTimeTicks <> ""
             		textTime = formatTime(Int(((i.RunTimeTicks).ToFloat() / 10000) / 1000))
+			shortrun = FirstOf(RegRead("prefAbbreviate"), "no")
+			if shortrun = "yes" then
+				r = CreateObject("roRegex","(\d+):(\d+):(\d+)","")
+				match = r.match(textTime)
+				if match.count() > 0 then
+					hour = match[1]
+					mi = match[2]
+				else
+					r = CreateObject("roRegex","(\d+):(\d+)","")
+					match = r.match(textTime)
+					if match.count() > 0 then
+						hour = 0
+						mi = match[1]
+					else
+						hour = 0
+						mi = 0
+					end if
+				end if
+				textTime = ""
+				if tostr(hour) <> "0" then textTime = textTime + tostr(hour)+"h"
+				if tostr(mi) <> "0" then textTime = textTime + tostr(mi)+"m"
+			end if
 			videoLine = videoLine + textTime
 		end if
-		if i.ProductionYear <> invalid then
+		if i.ProductionYear <> invalid and i.ProductionYear <> 0
 			if videoLine <> "" then videoLine = videoLine + " / "
 			videoLine = videoLine + tostr(i.ProductionYear)
 		end if
-		if i.OfficialRating <> invalid then
+		if i.OfficialRating <> invalid
 			if videoLine <> "" then videoLine = videoLine + " / " 
 			videoLine = videoLine + tostr(i.OfficialRating)
 		end if
         	if i.IsHD <> invalid
-            		if i.IsHD then videoLine = videoLine + " / HD" 
+			if videoLine <> "" then videoLine = videoLine + " / " 
+            		if i.IsHD then videoLine = videoLine + "HD" 
         	end if
+
+        	if i.contentType = "LocalTrailers" or i.isTrailer = true
+			if i.locationtype = "FileSystem" then 
+				trInfo = "Local"
+			else
+				trInfo = "Remote"
+			end if
+			if videoLine <> ""
+				videoLine = videoLine + " / "
+			end if
+			videoLine = videoLine + trInfo
+		end if
 		if i.userData <> invalid AND i.UserData.PlayCount <> invalid then
 			if videoline <> "" then videoLine = videoLine + " / "
 			videoLine = videoLine + tostr(i.UserData.PlayCount) + "x"
@@ -1066,7 +1166,33 @@ Function getShortDescriptionLine2(i as Object, mode as String) as String
 	else if i.type = "Video" or i.type = "MusicVideo" Then
 
 		videoLine = ""
-		if i.Duration <> invalid then videoLine = VideoLine + tostr(i.Duration)
+		if i.Duration <> invalid then
+			shortrun = FirstOf(RegRead("prefAbbreviate"), "no")
+			if shortrun = "yes" then
+				r = CreateObject("roRegex","(\d+):(\d+):(\d+)","")
+				match = r.match(i.Duration)
+				if match.count() > 0 then
+					hour = match[1]
+					mi = match[2]
+				else
+					r = CreateObject("roRegex","(\d+):(\d+)","")
+					match = r.match(i.Duration)
+					if match.count() > 0 then
+						hour = 0
+						mi = match[1]
+					else
+						hour = 0
+						mi = 0
+					end if
+				end if
+				textTime = ""
+				if tostr(hour) <> "0" then textTime = textTime + tostr(hour)+"h"
+				if tostr(mi) <> "0" then textTime = textTime + tostr(mi)+"m"
+				videoLine = VideoLine + textTime
+			else
+				videoLine = VideoLine + tostr(i.Duration)
+			end if
+		end if
         	if i.IsHD <> invalid
             		if i.IsHD then videoLine = videoLine + " / HD" 
         	end if
@@ -1162,7 +1288,6 @@ Function getDescription(i as Object, mode as String) as String
 	else if i.Overview <> invalid Then
 
 		return i.Overview
-
 	end If
 
 	return ""
@@ -1269,6 +1394,7 @@ Function getThemeMusic(itemId As String) As Object
 
 		return parseItemsResponse(response, 0, "list")
     else
+	createDialog("Theme Music Error!", "Error getting theme music.", "OK", true)
         Debug("Error getting theme music")
     end if
 
@@ -1324,6 +1450,7 @@ Function GetFullItemMetadata(item, isForPlayback as Boolean, options as Object) 
 
 	itemId = item.Id
 	itemType = item.ContentType
+	if itemid = invalid then return item
 
 	Debug("Getting metadata for Id " + itemId)
 
@@ -1522,7 +1649,6 @@ Function getOptimalMediaSource(mediaType, mediaSources)
 	Force = FirstOf(regRead("prefPlayMethod"),"Auto")
 	if Force = "Auto" or Force = "DirectPlay" then
 		for each mediaSource in mediaSources
-	
 			mediaSource.enableDirectPlay = supportsDirectPlay(mediaSource)
 			if mediaSource.enableDirectPlay = true or Force = "DirectPlay" then
 				return mediaSource
@@ -1532,7 +1658,6 @@ Function getOptimalMediaSource(mediaType, mediaSources)
 
 	if Force = "Auto" or Force = "DirectStream" then	
 		for each mediaSource in mediaSources
-	
 			if mediaSource.SupportsDirectStream = true or Force = "DirectStream" then
 				return mediaSource
 			end if
@@ -1541,13 +1666,12 @@ Function getOptimalMediaSource(mediaType, mediaSources)
 
 	if Force = "Auto" or Force = "Transcode" then
 		for each mediaSource in mediaSources
-	
 			if mediaSource.SupportsTranscoding = true or Force = "Transcode" then
 				return mediaSource
 			end if
 		end for
 	end if
-	
+	createDialog("Media Source Error!", "No Optimal Media Source Found. (invalid)", "OK", true)
 	return invalid
 
 End Function
@@ -1589,7 +1713,7 @@ function showPlaybackInfoErrorMessage(errorCode)
 		message = "There was an error processing the request. Please try again later."
 	end if
 	
-	createDialog("Playback Error", message, "Back", true)
+	createDialog("Playback Error!", message, "OK", true)
 	
 End Function
 
@@ -1638,6 +1762,7 @@ function getDynamicPlaybackInfo(itemId, deviceProfile, startPositionTicks, media
     response = request.PostFromStringWithTimeout(json, 10)
 
 	if response = invalid
+	createDialog("Response Error!", "No Dyanmic Playback info Found. (invalid)", "OK", true)
         return invalid
     else
 	
@@ -1690,6 +1815,7 @@ function getLiveStream(itemId, playSessionId, deviceProfile, startPositionTicks,
     response = request.PostFromStringWithTimeout(json, 30)
 
 	if response = invalid
+		createDialog("Response Error!", "No Live Stream Found. (invalid)", "OK", true)
         return invalid
     else
 	

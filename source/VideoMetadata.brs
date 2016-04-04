@@ -34,6 +34,7 @@ Function getVideoMetadata(videoId As String) As Object
 
 		return getMetadataFromServerItem(i, 0, imageStyle, "springboard")
     else
+	createDialog("MetaData Error!", "Failed to Get Video Metadata.", "OK", true)
         Debug("Failed to Get Video Metadata")
     end if
 
@@ -55,7 +56,10 @@ Sub addVideoDisplayInfo(metaData as Object, item as Object)
 	if mediaStreams = invalid then mediaStreams = item.MediaStreams
 
 	' Can't continue at this point
-	if mediaStreams = invalid then return
+	if mediaStreams = invalid then
+		'createDialog("DisplayInfo Error!", "Failed to Get Display Info.", "OK", true)
+		return
+	end if
 
     foundVideo             = false
 
@@ -192,7 +196,6 @@ Function getMediaStream(mediaStreams, streamType, optionIndex, defaultIndex) as 
 			if stream.Type = streamType then return stream
 		end for
 	end if
-
 	return invalid
 
 End Function
@@ -291,6 +294,7 @@ Function postWatchedStatus(videoId As String, markWatched As Boolean) As Boolean
         Debug("Mark Played/Unplayed")
         return true
     else
+	createDialog("Watched Error!", "The watch status for " + m.metadata.Title + "  cannot be changed.", "OK", true)
         Debug("Failed to Post Manual Watched Status")
     end if
 
@@ -321,12 +325,42 @@ Function postFavoriteStatus(videoId As String, markFavorite As Boolean) As Boole
         Debug("Add/Remove Favorite")
         return true
     else
+	createDialog("Favorites Error!", "Failed to Post Favorite Status", "OK", true)
         Debug("Failed to Post Favorite Status")
     end if
 
     return false
 End Function
 
+'**********************************************************
+'** Post Also Watching Status
+'**********************************************************
+
+Function postAlsoWatchingStatus(UserId As String, markAlso As Boolean, sessionId as String) As Boolean
+    ' URL
+    url = GetServerBaseUrl() + "/Emby/Sessions/" + HttpEncode(sessionId) + "/Users/" + HttpEncode(UserId)
+
+    ' Prepare Request
+    request = HttpRequest(url)
+    request.AddAuthorization()
+
+    ' If removing as also watched
+    if Not markAlso
+        request.SetRequest("DELETE")
+    end if
+
+    ' Execute Request
+    response = request.PostFromStringWithTimeout("", 5)
+    if response <> invalid
+        Debug("Sessions Also Watching")
+        return true
+    else
+	createDialog("Also Watching Error!", "This user cannot be added to your session.", "OK", true)
+        Debug("Failed to Post Manual Watched Status")
+    end if
+
+    return false
+End Function
 
 '**********************************************************
 '** Get Local Trailers
@@ -372,13 +406,31 @@ Function getSpecialFeaturesFromUrl(url As String) As Object
         end if
 
         for each i in jsonObj
-            
-			metaData = getMetadataFromServerItem(i, 0, "flat-episodic-16x9")
-
-            contentList.push( metaData )
-        end for
-
+		metaData = getMetadataFromServerItem(i, 0, "flat-episodic-16x9")
+		metaData.Overview = m.Viewcontroller.TrailerOverview
+		if metaData.overview <> invalid
+			if metaData.description <> invalid
+				if NOT metaData.description = metaData.overview
+					metaData.description = metaData.description + metaData.overview
+				end if
+			else
+				metaData.description = metaData.overview
+			end if
+		end if
+		trLoc=""
+		if right(url,8)="Trailers"
+			if metaData.LocationType = "FileSystem"
+				trLoc = "Local / "
+			else
+				trLoc = "Internet / "
+			end if
+		end if
+		MetaData.shortdescriptionline2 = trLoc + metaData.shortdescriptionline2
+		contentList.push( metaData )
+	end for
         return contentList
+    else
+	createDialog("Response Error!", "Failed to Get Special Features", "OK", true)
     end if
 
     return invalid
@@ -403,6 +455,34 @@ Function getVideoIntros(videoId As String) As Object
     if response <> invalid
 
 		return parseItemsResponse(response, 0, "flat-episodic-16x9")
+    else
+	createDialog("Response Error!", "Failed to Get Video Intros", "OK", true)
+    end if
+
+    return invalid
+End Function
+
+
+
+'**********************************************************
+'** Get Additional Parts
+'**********************************************************
+
+Function getAdditionalParts(videoId As String) As Object
+    ' URL
+    url = GetServerBaseUrl() + "/Videos/" + HttpEncode(videoId) + "/AdditionalParts?UserId=" + HttpEncode(getGlobalVar("user").Id)
+
+    ' Prepare Request
+    request = HttpRequest(url)
+    request.ContentType("json")
+    request.AddAuthorization()
+
+    ' Execute Request
+    response = request.GetToStringWithTimeout(10)
+    if response <> invalid
+	return parseItemsResponse(response, 0, "flat-episodic-16x9")
+    else
+	createDialog("Response Error!", "Failed to Get Additional Parts", "OK", true)
     end if
 
     return invalid

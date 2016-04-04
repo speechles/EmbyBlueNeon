@@ -49,12 +49,14 @@ Function handlePreferencesScreenMessage(msg) as Boolean
 				preferenceFunctions = [
 					GetTextPreference,
 					GetPreferenceVideoQuality,
+					GetPreferenceStopMusic,
 					GetPreferenceTVThemeMusic,
 					GetPreferenceTVThemeMusicRepeat,
+					GetPreferenceTVThemeMusicRepeat,
 					GetPreferenceRememberUser,
+					GetPreferenceExit,
 					GetPreferenceDelEps,
-					GetPreferenceDelEps,
-					GetPreferenceDelEps,
+					GetPreferenceShowClock,
 					GetPreferenceEnhancedImages,
 					GetPreferenceMediaIndicators,
 					GetPreferenceShowClock,
@@ -66,6 +68,7 @@ Function handlePreferencesScreenMessage(msg) as Boolean
 					GetPreferenceSlideshow,
 					GetPreferenceSlideDuration,
 					GetPreferenceEnableTrueHD,
+					GetPreferenceEnableTrueHD,
 					GetPreferencedirectFlash,
 					GetPreferenceDTStoAC3,
 					GetPreferenceOnlyh264,
@@ -74,6 +77,7 @@ Function handlePreferencesScreenMessage(msg) as Boolean
 					GetPreferenceTransAC3,
 					GetPreferenceConvAAC,
 					GetPreferenceforceSurround,
+					GetPreferenceMaxFrame,
 					GetPreferenceTheme,
 					GetPreferenceColor1,
 					GetPreferenceColor2,
@@ -213,7 +217,7 @@ Function handleItemOptionsScreenMessage(msg) as Boolean
             prefSelected = list[index].Id
 
             ' Save New Preference
-            if m.ItemId = "prefTwoDesc" or m.ItemId = "prefDetailStats" then
+            if m.ItemId = "prefTwoDesc" or m.ItemId = "prefDetailStats" or m.ItemId = "prefRemWatch" then
 		regUserWrite(m.ItemId, prefSelected)
 	    else
 		if m.ItemId = "prefTheme" or m.Itemid = "theme_color1" OR m.ItemId = "theme_color2" or m.Itemid = "theme_color3" OR m.ItemId = "theme_color4" or m.ItemId = "theme_border" then
@@ -256,13 +260,29 @@ Function handleItemOptionsScreenMessage(msg) as Boolean
 			if m.ItemId = "prefTheme" or m.ItemId = "theme_border"
 				m.ViewController.CreateHomeScreen()
 			end if
-		end if           
-		if m.ItemId = "prefDelEps" or m.ItemId = "prefDelTV" or m.ItemId = "prefDelAll" then
+		else if m.ItemId = "prefDelAll" then
 			user = getGlobalVar("user")
-			if user.isAdmin then RegWrite(m.itemId, prefSelected)
-	    	else
+			if user.isAdmin then
+				RegWrite(m.itemId, prefSelected)
+			else
+				createDialog("Permission Error!", "You must be marked as an administrative user in order to change the delete option. Please see an administrator.", "OK", true)
+			end if
+	    	else if m.ItemId = "prefRememberUser"
+			if prefSelected = "no" then
+				if showRememberDialog() = "1" then
+					RegWrite(m.itemId, prefSelected)
+					while m.ViewController.screens.Count() > 0
+						m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+					end while
+					m.viewcontroller.Logout()
+				end if
+			else
+				RegWrite(m.itemId, prefSelected)
+			end if
+		else
 			RegWrite(m.itemId, prefSelected)
 		end if
+
 	    end if
 
 	m.Screen.Close()
@@ -278,6 +298,9 @@ Function handleItemOptionsScreenMessage(msg) as Boolean
 
 End Function
 
+Function showRememberDialog()
+	return showContextViewMenuYesNoDialog("Don't Remember User?", "Are you sure you want to always use a login screen?" + chr(10) + "Choosing YES will log you out and go to the login screen."+chr(10))
+End Function
 
 '**********************************************************
 '** Refresh Preferences Page
@@ -374,6 +397,17 @@ Function GetPreferenceList() as Object
             SDBackgroundImageUrl: viewController.getThemeImageUrl("sd-preferences-lg.png")
         },
         {
+            Title: "Stop Music: " + GetSelectedPreference(GetPreferenceStopMusic(), RegRead("prefStopMusic")),
+            ShortTitle: "Stop Music?",
+            ID: "prefStopMusic",
+            ContentType: "pref",
+			PrefType: "list",
+            ShortDescriptionLine1: "Stop music when leaving the Music Screen?",
+            ShortDescriptionLine2: "No lets music keep playing!",
+            HDBackgroundImageUrl: viewController.getThemeImageUrl("hd-preferences-lg.png"),
+            SDBackgroundImageUrl: viewController.getThemeImageUrl("sd-preferences-lg.png")
+        },
+        {
             Title: "Play Theme Music: " + GetSelectedPreference(GetPreferenceTVThemeMusic(), RegRead("prefThemeMusic")),
             ShortTitle: "Play Theme Music?",
             ID: "prefThemeMusic",
@@ -396,6 +430,17 @@ Function GetPreferenceList() as Object
             SDBackgroundImageUrl: viewController.getThemeImageUrl("sd-preferences-lg.png")
         },
         {
+            Title: "Abbreviate Runtimes: " + GetSelectedPreference(GetPreferenceTVThemeMusicRepeat(), RegRead("prefAbbreviate")),
+            ShortTitle: "Abbreviate Runtimes?",
+            ID: "prefAbbreviate",
+            ContentType: "pref",
+			PrefType: "list",
+            ShortDescriptionLine1: "Abbreviate runtimes when shown?",
+            ShortDescriptionLine2: "NO 1:15:04 | YES 1h15m",
+            HDBackgroundImageUrl: viewController.getThemeImageUrl("hd-preferences-lg.png"),
+            SDBackgroundImageUrl: viewController.getThemeImageUrl("sd-preferences-lg.png")
+        },
+        {
             Title: "Remember User: " + GetSelectedPreference(GetPreferenceRememberUser(), RegRead("prefRememberUser")),
             ShortTitle: "Remember User?",
             ID: "prefRememberUser",
@@ -407,8 +452,19 @@ Function GetPreferenceList() as Object
             SDBackgroundImageUrl: viewController.getThemeImageUrl("sd-preferences-lg.png")
         },
         {
-            Title: "Allow Deleting ALL Librarys: " + GetSelectedPreference(GetPreferenceDelEps(), RegRead("prefDelAll")),
-            ShortTitle: "Allow Deleting Library Items?",
+            Title: "Confirm Before Exit: " + GetSelectedPreference(GetPreferenceExit(), RegRead("prefExit")),
+            ShortTitle: "Confirm Before Exit?",
+            ID: "prefExit",
+            ContentType: "pref",
+			PrefType: "list",
+            ShortDescriptionLine1: "Confirm YES with a dialog before exiting?",
+            ShortDescriptionLine2: "No accidental exits",
+            HDBackgroundImageUrl: viewController.getThemeImageUrl("hd-preferences-lg.png"),
+            SDBackgroundImageUrl: viewController.getThemeImageUrl("sd-preferences-lg.png")
+        },
+        {
+            Title: "Allow Delete: " + GetSelectedPreference(GetPreferenceDelEps(), RegRead("prefDelAll")),
+            ShortTitle: "Allow Delete?",
             ID: "prefDelAll",
             ContentType: "pref",
 			PrefType: "list",
@@ -418,24 +474,13 @@ Function GetPreferenceList() as Object
             SDBackgroundImageUrl: viewController.getThemeImageUrl("sd-preferences-lg.png")
         },
         {
-            Title: "Allow Deleting TV Library: " + GetSelectedPreference(GetPreferenceDelEps(), RegRead("prefDelEps")),
-            ShortTitle: "Allow Deleting TV Library?",
-            ID: "prefDelEps",
+            Title: "Hide Watched Items: " + GetSelectedPreference(GetPreferenceShowClock(), RegUserRead("prefRemWatch")),
+            ShortTitle: "Hide watched items?",
+            ID: "prefRemWatch",
             ContentType: "pref",
 			PrefType: "list",
-            ShortDescriptionLine1: "Allow for PERMANENTLY deleting items from your TV library?",
-            ShortDescriptionLine2: "USE THIS AT YOUR OWN RISK!",
-            HDBackgroundImageUrl: viewController.getThemeImageUrl("hd-preferences-lg.png"),
-            SDBackgroundImageUrl: viewController.getThemeImageUrl("sd-preferences-lg.png")
-        },
-        {
-            Title: "Allow Deleting Recordings: " + GetSelectedPreference(GetPreferenceDelEps(), RegRead("prefDelTV")),
-            ShortTitle: "Allow Deleting TV Recordings?",
-            ID: "prefDelTV",
-            ContentType: "pref",
-			PrefType: "list",
-            ShortDescriptionLine1: "Allow for PERMANENTLY deleting TV recordings?",
-            ShortDescriptionLine2: "USE THIS AT YOUR OWN RISK!",
+            ShortDescriptionLine1: "Hide watched items from the latest row on the homescreen?",
+            ShortDescriptionLine2: "No means watched are visible",
             HDBackgroundImageUrl: viewController.getThemeImageUrl("hd-preferences-lg.png"),
             SDBackgroundImageUrl: viewController.getThemeImageUrl("sd-preferences-lg.png")
         },
@@ -564,6 +609,17 @@ Function GetPreferenceList() as Object
             SDBackgroundImageUrl: viewController.getThemeImageUrl("sd-preferences-lg.png")
         },
         {
+            Title: "h264/MPEG4 in 4k: " + GetSelectedPreference(GetPreferenceEnableTrueHD(), firstOf(RegRead("prefgo4k"), "0")),
+            ShortTitle: "Pass 4k in h264/MPEG4?",
+            ID: "prefgo4k",
+            ContentType: "pref",
+            PrefType: "list",
+            ShortDescriptionLine1: "Would you like to enable 4k resolution to pass thru in h264 and MPEG4?",
+            ShortDescriptionLine2: "This is mainly for roku4",
+            HDBackgroundImageUrl: viewController.getThemeImageUrl("hd-preferences-lg.png"),
+            SDBackgroundImageUrl: viewController.getThemeImageUrl("sd-preferences-lg.png")
+        },
+        {
             Title: "Auto Direct-Play Flash: " + GetSelectedPreference(GetPreferencedirectFlash(), firstOf(RegRead("prefdirectFlash"), "0")),
             ShortTitle: "Direct-Play Flash Video?",
             ID: "prefdirectFlash",
@@ -648,6 +704,17 @@ Function GetPreferenceList() as Object
             PrefType: "list",
             ShortDescriptionLine1: "Force Surround Sound AC3 when transcoding?",
             ShortDescriptionLine2: "Convert AAC to AC3"
+            HDBackgroundImageUrl: viewController.getThemeImageUrl("hd-preferences-lg.png"),
+            SDBackgroundImageUrl: viewController.getThemeImageUrl("sd-preferences-lg.png")
+        },
+        {
+            Title: "Max Framerate: " + GetSelectedPreference(GetPreferenceMaxFrame(), firstOf(RegRead("prefmaxframe"), "30")),
+            ShortTitle: "What is the Max Framerate?",
+            ID: "prefmaxframe",
+            ContentType: "pref",
+            PrefType: "list",
+            ShortDescriptionLine1: "What is the maximum framerate you want used for direct play?",
+            ShortDescriptionLine2: "30 is recommended"
             HDBackgroundImageUrl: viewController.getThemeImageUrl("hd-preferences-lg.png"),
             SDBackgroundImageUrl: viewController.getThemeImageUrl("sd-preferences-lg.png")
         },
@@ -919,6 +986,23 @@ Function GetPreferenceVideoQuality() as Object
     return prefOptions
 End Function
 
+Function GetPreferenceStopMusic() as Object
+    prefOptions = [
+        {
+            Title: "Yes [default]",
+            Id: "true",
+            IsDefault: true
+        },
+        {
+            Title: "No",
+            Id: "false",
+            IsDefault: false
+        }
+    ]
+
+    return prefOptions
+End Function
+
 Function GetPreferenceTVThemeMusic() as Object
     prefOptions = [
         {
@@ -1055,16 +1139,33 @@ Function GetPreferenceRememberUser() as Object
     return prefOptions
 End Function
 
-Function GetPreferenceDelEps() as Object
+Function GetPreferenceExit() as Object
     prefOptions = [
         {
-            Title: "No [default]",
-            Id: "0",
+            Title: "Yes [default]",
+            Id: "1",
             IsDefault: true
         },
         {
-            Title: "Yes",
+            Title: "No",
+            Id: "0",
+            IsDefault: false
+        }
+    ]
+
+    return prefOptions
+End Function
+
+Function GetPreferenceDelEps() as Object
+    prefOptions = [
+        {
+            Title: "Yes [default]",
             Id: "1",
+            IsDefault: true
+        },
+        {
+            Title: "No",
+            Id: "0",
             IsDefault: false
         }
     ]
@@ -1334,6 +1435,33 @@ Function GetPreferenceforceSurround() as Object
             IsDefault: false
         }
     ]
+    return prefOptions
+End Function
+
+Function GetPreferenceMaxFrame() as Object
+    prefOptions = [
+        {
+            Title: "30 fps [default]",
+            Id: "30",
+            IsDefault: true
+        },
+        {
+            Title: "31 fps",
+            Id: "31",
+            IsDefault: false
+        },
+        {
+            Title: "60 fps",
+            Id: "60",
+            IsDefault: false
+        },
+        {
+            Title: "61 fps",
+            Id: "61",
+            IsDefault: false
+        }
+    ]
+
     return prefOptions
 End Function
 

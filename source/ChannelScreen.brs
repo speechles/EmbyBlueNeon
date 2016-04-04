@@ -33,8 +33,6 @@ Function createChannelScreen(viewController as Object, item As Object) As Object
     screen.baseActivate = screen.Activate
     screen.Activate = ChannelScreenActivate
 
-    screen.recreateOnActivate = true
-
     screen.settingsPrefix = settingsPrefix
 
     screen.contextMenuType = contextMenuType
@@ -42,7 +40,7 @@ Function createChannelScreen(viewController as Object, item As Object) As Object
     if imageType = 0 then
         screen.displayDescription = 1
     else
-        screen.displayDescription = (firstOf(RegUserRead("channelDescription"), "0")).ToInt()
+        screen.displayDescription = (firstOf(RegUserRead("channelDescription"), "1")).ToInt()
     end if
 
     screen.createContextMenu = ChannelScreenCreateContextMenu
@@ -58,7 +56,7 @@ Sub ChannelScreenActivate(priorScreen)
 	if imageType = 0 then
 		displayDescription = 1
 	else
-		displayDescription = (firstOf(RegUserRead("channelDescription"), "0")).ToInt()
+		displayDescription = (firstOf(RegUserRead("channelDescription"), "1")).ToInt()
 	end if
 	
     if imageType = 0 then

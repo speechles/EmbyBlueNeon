@@ -267,7 +267,7 @@ End Sub
 Sub setGridTheme(viewController as Object, style as String)
     ' This has to be done before the CreateObject call. Once the grid has
     ' been created you can change its style, but you can't change its theme.
-
+    
     border = firstOf(RegRead("theme_border"), "1")
     app = CreateObject("roAppManager")
     if style = "two-row-flat-landscape-custom" then

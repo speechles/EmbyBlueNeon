@@ -23,6 +23,14 @@ Function getDirectPlayProfiles()
 	    surroundSound = surroundSound AND audioOutput51 'AND (RegRead("fivepointone", "preferences", "1") = "1")
 	end if
 
+	' if private mode enabled disable surround sound
+	private = FirstOf(regRead("prefprivate"),"0")
+	if private = "1" then
+		surroundSound = false
+	    	audioOutput51 = false
+	    	surroundSoundDCA = false
+	end if
+		
 	device = CreateObject("roDeviceInfo")
  	model = left(device.GetModel(),4)
 
@@ -125,7 +133,7 @@ Function getTranscodingProfiles()
 	AACconv = firstOf(RegRead("prefConvAAC"), "aac")
 	DefAudio = firstOf(RegRead("prefDefAudio"), "aac")
 	versionArr = getGlobalVar("rokuVersion")
-	
+	private = FirstOf(regRead("prefprivate"),"0")
 
 	' firmware 6.1 and greater
         If CheckMinimumVersion(versionArr, [6, 1]) then
@@ -138,6 +146,12 @@ Function getTranscodingProfiles()
 	    audioOutput51 = getGlobalVar("audioOutput51")
 	    surroundSoundDCA = surroundSound AND audioOutput51 'AND (RegRead("fivepointoneDCA", "preferences", "1") = "1")
 	    surroundSound = surroundSound AND audioOutput51 'AND (RegRead("fivepointone", "preferences", "1") = "1")
+	end if
+
+	if private = "1" then
+		surroundsound = false
+		audioOutput51 = false
+	    	surroundSoundDCA = false
 	end if
 
 	profiles = []
@@ -255,15 +269,26 @@ Function getCodecProfiles()
 	device = CreateObject("roDeviceInfo")
 	model = left(device.GetModel(),4)
 	versionArr = getGlobalVar("rokuVersion")
+	framerate = firstOf(regRead("prefmaxframe"), "30")
+	Go4k = firstOf(RegRead("prefgo4k"), "0")
+	Force = firstOf(RegRead("prefPlayMethod"), "Auto")
 	directFlash = firstOf(RegRead("prefdirectFlash"), "0")
-	if directFlash = "1" then
+	if directFlash = "1" and framerate = "30" then
 		framerate = "31"
-	  else
-		framerate = "30"
 	end if
 
-	maxWidth = "1920"
-	maxHeight = "1080"
+	if Force = "Transcode" then
+		framerate = 30
+	end if
+
+	if Go4k = "0" then
+		maxWidth = "1920"
+		maxHeight = "1080"
+	else
+        	maxWidth = "3840"
+        	maxHeight = "2160"
+	end if
+
         max4kWidth = "3840"
         max4kHeight = "2160"
 
@@ -280,6 +305,14 @@ Function getCodecProfiles()
 	    surroundSound = surroundSound AND audioOutput51 'AND (RegRead("fivepointone", "preferences", "1") = "1")
 	end if
 	
+	' private listening nuke all surround sound
+	private = FirstOf(regRead("prefprivate"),"0")
+	if private = "1" then
+		surroundsound = false
+		audioOutput51 = false
+	    	surroundSoundDCA = false
+	end if
+
 	if getGlobalVar("displayType") <> "HDTV" then
 		maxWidth = "1280"
 		maxHeight = "720"
@@ -482,7 +515,13 @@ Function getCodecProfiles()
 		Codec: "mpeg4"
 		Conditions: mpeg4Conditions
 	})
-		
+	
+	if model = "4400" then
+		AACchannels = "6"
+	else
+		AACchannels = "2"
+	end if
+
 	profiles.push({
 		Type: "VideoAudio"
 		Codec: "aac"
@@ -495,14 +534,14 @@ Function getCodecProfiles()
 		{
 			Condition: "LessThanEqual"
 			Property: "AudioChannels"
-			Value: "2"
+			Value: AACchannels
 			IsRequired: true
 		}]
 	})
 
 	' support 7.1 Channel Dolby Digital+ if found
-	audioDDPlus = getGlobalVar("audioDDPlus")
-	if audioDDPlus then
+	audioDDPlus = FirstOf(getGlobalVar("audioDDPlus"), false)
+	if audioDDPlus and surroundSound then
 		ac3Channels = "8"
 	else
 		ac3Channels = "6"

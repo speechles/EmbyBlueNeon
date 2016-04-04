@@ -42,27 +42,33 @@ Sub createContextMenuDialog(options as Object, useFacade = true)
     filterBy  = (firstOf(RegUserRead(options.settingsPrefix + "FilterBy"), "0")).ToInt()
     sortBy    = (firstOf(RegUserRead(options.settingsPrefix + "SortBy"), "0")).ToInt()
     sortOrder = (firstOf(RegUserRead(options.settingsPrefix + "SortOrder"), "0")).ToInt()
-
+	
     ' Setup Buttons
 	if options.filterOptions <> invalid then
-		dlg.SetButton("filter", "Filter by: " + options.filterOptions[filterBy])
+		dlg.SetButton("filter", "+ Filter By: " + options.filterOptions[filterBy])
 	end if
 	
 	if options.sortOptions <> invalid then
-		dlg.SetButton("sortby", "Sort by: " + options.sortOptions[sortBy])
+		dlg.SetButton("sortby", "+ Sort By: " + options.sortOptions[sortBy])
 	end if
 	
 	if options.showSortOrder = true then
-		dlg.SetButton("sortorder", "Sort Order: " + sortOrderOptions[sortOrder])
+		dlg.SetButton("sortorder", "+ Sort Order: " + sortOrderOptions[sortOrder])
 	end if
     
-    dlg.SetButton("view", "Change View Style")
-    dlg.SetButton("close", "Close this window")
+	dlg.SetButton("view", "Change View Style")
+	musicstop = FirstOf(GetGlobalVar("musicstop"),"0")
+	if AudioPlayer().Context <> invalid and musicstop = "0"
+		dlg.SetButton("nowplaying", "-> Go To Now Playing")
+	end if
+	dlg.SetButton("homescreen", "-> Go To Home Screen")
+	dlg.SetButton("preferences", "-> Go To Preferences")
+	dlg.SetButton("search", "-> Go To Search Screen")
+	dlg.SetButton("close", "Close this Window")
 
-    dlg.Show(true)
+	dlg.Show(true)
 
 	returned = dlg.Result
-	printany(1,"",options.settingsPrefix)
     if returned = "filter"
         returned = createOptionsDialog("Choose your filter option", options.filterOptions)
         if returned <> invalid then RegUserWrite(options.settingsPrefix + "FilterBy", returned)
@@ -90,6 +96,39 @@ Sub createContextMenuDialog(options as Object, useFacade = true)
         createContextMenuDialog(options, false)
 		return
 
+    else if returned = "nowplaying"
+	m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+        dummyItem = CreateObject("roAssociativeArray")
+        dummyItem.ContentType = "audio"
+        dummyItem.Key = "nowplaying"
+        GetViewController().CreateScreenForItem(dummyItem, invalid, ["Now Playing"])
+	return
+
+    else if returned = "homescreen"
+	while m.ViewController.screens.Count() > 0
+		m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+	end while
+	m.ViewController.CreateHomeScreen()
+	return
+
+    else if returned = "preferences"
+	m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+        dummyItem = CreateObject("roAssociativeArray")
+        dummyItem.ContentType = "Preferences"
+        dummyItem.Key = "Preferences"
+        GetViewController().CreateScreenForItem(dummyItem, invalid, ["Preferences"])
+	return
+
+    else if returned = "search"
+	m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+        dummyItem = CreateObject("roAssociativeArray")
+        dummyItem.ContentType = "Search"
+        dummyItem.Key = "Search"
+        GetViewController().CreateScreenForItem(dummyItem, invalid, ["Search"])
+        return
+
+    else if returned = "close"
+	' this dialog auto-closes
     end if
 
 	if facade <> invalid then

@@ -46,6 +46,7 @@ Function getTvSeasons(seriesId As String) As Object
         jsonObj   = ParseJSON(response)
 
         if jsonObj = invalid
+	    createDialog("JSON Error", "Error while parsing JSON response for Seasons List for Show.", "OK", true)
             Debug("Error while parsing JSON response for TV Seasons List for Show")
             return invalid
         end if
@@ -61,8 +62,10 @@ Function getTvSeasons(seriesId As String) As Object
         end for
         
         return [listIds, listNames, listNumbers]
+    else
+	createDialog("Response Error!", "Error while parsing JSON response for Seasons List for Show. (invalid)", "OK", true)
     end if
-
+    
     return invalid
 End Function
 
@@ -99,7 +102,8 @@ Function getTvNextEpisode(seriesId As String) As Object
         jsonObj = ParseJSON(response)
 
         if jsonObj = invalid
-            Debug("Error while parsing JSON response for TV Show Next Unplayed Episode")
+	    createDialog("JSON Error", "Error while parsing JSON response for Show Next Unplayed Episode.", "OK", true)
+            Debug("Error while parsing JSON response for Show Next Unplayed Episode")
             return invalid
         end if
 
@@ -122,7 +126,8 @@ Function getTvNextEpisode(seriesId As String) As Object
         end if
 
         return metaData
+    else
+    	createDialog("Response Error!", "Error while parsing JSON response for Show Next Unplayed Episode. (invalid)", "OK", true)
     end if
-
     return invalid
 End Function

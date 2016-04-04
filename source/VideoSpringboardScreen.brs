@@ -19,7 +19,7 @@ Function createVideoSpringboardScreen(context, index, viewController) As Object
     obj.closeOnActivate = false
     obj.Activate = videoActivate
 
-	obj.DeleteLiveTvRecording = springboardDeleteRecording
+	obj.DeleteItem = springboardDeleteItem
 	obj.CancelLiveTvTimer = springboardCancelTimer
 	obj.RecordLiveTvProgram = springboardRecordProgram
 	obj.ShowStreamsDialog = springboardShowStreamsDialog
@@ -33,7 +33,6 @@ Function createVideoSpringboardScreen(context, index, viewController) As Object
     if NOT AudioPlayer().IsPlaying AND firstOf(RegRead("prefThemeMusic"), "yes") = "yes" then
         AudioPlayer().PlayThemeMusic(obj.Item)
         obj.Cleanup = baseStopAudioPlayer
-
     end if
 
     return obj
@@ -48,9 +47,7 @@ Sub videoSetupButtons()
     m.ClearButtons()
 
 	video = m.metadata
-	DeleteAll = firstOf(RegRead("prefDelAll"), "0")
-	DeleteEpisodes = firstOf(RegRead("prefDelEps"), "0")
-	DeleteTV = firstOf(RegRead("prefDelTV"), "0")
+	cast = 0
     if video.ContentType = "Program" And video.PlayAccess = "Full"
 	
         if canPlayProgram(video)
@@ -84,11 +81,12 @@ Sub videoSetupButtons()
         if video.LocalTrailerCount <> invalid and video.LocalTrailerCount > 0
             if video.LocalTrailerCount > 1
 				m.AddButton("Trailers", "trailers")
+				cast = 1
             else
 				m.AddButton("Trailer", "trailer")
+				cast = 1
             end if
         end if
-
 		audioStreams = []
 		subtitleStreams = []
 
@@ -105,20 +103,67 @@ Sub videoSetupButtons()
 
 		m.audioStreams = audioStreams
 		m.subtitleStreams = subtitleStreams
+    end if
 
-    end if
-    
-    if  (video.CanDelete and video.ContentType = "Episode" and DeleteEpisodes = "1") or (video.CanDelete and DeleteTV = "1" and video.ContentType = "Recordings") or (video.CanDelete and DeleteAll = "1") Then
-        m.AddButton("Delete", "delete")
-    end if
-	
+    'if m.screen.CountButtons() < 1
+	'm.AddButton("Open", "open")
+    'end if
+
+    ' Check for people
+     if video.People <> invalid and video.People.Count() > 0 and cast = 0 then
+
+		if video.MediaType = "Video" then
+			m.AddButton("Cast & Crew", "cast")
+		else
+			m.AddButton("People", "people")
+		end If
+     end if
 	if video.ContentType = "Person"
 		m.AddButton("Filmography", "filmography")
+		if Video.IsFavorite then
+			m.AddButton("Remove this person as a Favorite", "removefavorite")
+		else
+			m.AddButton("Mark this person as a Favorite", "markfavorite")
+		end if
 	end if
-	
+	if m.screen.CountButtons() < 5 and Video.FullDescription <> "" then
+		m.AddButton("View Full Description", "description")
+	end if
     ' rewster: TV Program recording does not need a more button, and displaying it stops the back button from appearing on programmes that have past
 	if video.ContentType <> "Program"
-		m.AddButton("More... (" + FirstOf(regRead("prefPlayMethod"),"Auto") + ")", "more")
+    		versionArr = getGlobalVar("rokuVersion")
+		If CheckMinimumVersion(versionArr, [6, 1]) then
+	    		surroundSound = getGlobalVar("SurroundSound")
+	    		audioOutput51 = getGlobalVar("audioOutput51")
+	    		surroundSoundDCA = getGlobalVar("audioDTS")
+		else
+			' legacy
+	    		surroundSound = SupportsSurroundSound(false, false)
+
+	    		audioOutput51 = getGlobalVar("audioOutput51")
+	    		surroundSoundDCA = surroundSound AND audioOutput51 'AND (RegRead("fivepointoneDCA", "preferences", "1") = "1")
+	    		surroundSound = surroundSound AND audioOutput51 'AND (RegRead("fivepointone", "preferences", "1") = "1")
+		end if
+		AH = ""
+		if SurroundSound then
+			if audioOutput51 then
+				AH = AH + " DD"
+			end if
+			if SurroundSoundDCA then
+				AH = AH + " DTS"
+			end if
+		else
+			AH = " Stereo"
+		end if
+		private = FirstOf(regRead("prefprivate"),"0")
+		if private = "1" then
+			AH = " PRIVATE"
+		end if
+		Extras = "(" + FirstOf(regRead("prefPlayMethod"),"Auto") + " @ " + firstOf(regread("prefmaxframe"), "30") + "fps)"
+		if AH <> invalid and AH <> "" then
+			 Extras = Extras + AH
+		end if
+		m.AddButton("More... " + Extras, "more")
 	end if
 
     if m.buttonCount = 0
@@ -252,9 +297,10 @@ Function handleVideoSpringboardScreenMessage(msg) As Boolean
 
     if type(msg) = "roSpringboardScreenEvent" then
 
-		item = m.metadata
+		item = GetFullItemMetadata(m.metadata, false, {})
 		itemId = item.Id
 		viewController = m.ViewController
+		screen = m
 
         if msg.isButtonPressed() then
 
@@ -294,40 +340,61 @@ Function handleVideoSpringboardScreenMessage(msg) As Boolean
 
             else if buttonCommand = "trailer" then
                 options = {
-					PlayStart: 0
-					intros: false
-				}
-				m.ViewController.CreatePlayerForItem(getLocalTrailers(item.Id), 0, options)
-
+			PlayStart: 0
+			intros: false
+		}
+		m.ViewController.CreatePlayerForItem(getLocalTrailers(item.Id), 0, options)
             else if buttonCommand = "trailers" then
                 newScreen = createLocalTrailersScreen(viewController, item)
-				newScreen.ScreenName = "Trailers" + itemId
+		newScreen.ScreenName = "Trailers" + itemId
                 viewController.InitializeOtherScreen(newScreen, [item.Title, "Trailers"])
-				newScreen.Show()
-				
+		newScreen.Show()	
             else if buttonCommand = "cancelrecording" then
-                
-				m.CancelLiveTvTimer(item)
-
-            else if buttonCommand = "delete" then
-				m.DeleteLiveTvRecording(item)
-
+		m.CancelLiveTvTimer(item)
+	    else if buttonCommand = "description" then
+		CreateDialog(Item.Title, Item.FullDescription, "OK", true)
+		return true
             else if buttonCommand = "streams" then
                 m.ShowStreamsDialog(item)
-
             else if buttonCommand = "record" then
                 m.RecordLiveTvProgram(item)
-
             else if buttonCommand = "filmography" then
                 m.ShowFilmography(item)
-				
+    	    else if buttonCommand = "cast" then
+        	newScreen = createPeopleScreen(m.ViewController, item)
+		newScreen.ScreenName = "People" + itemId
+        	m.ViewController.InitializeOtherScreen(newScreen, [item.Title, "Cast & Crew"])
+		newScreen.Show()
+        	return true
+    	    else if buttonCommand = "people" then
+        	newScreen = createPeopleScreen(m.ViewController, item)
+		newScreen.ScreenName = "People" + itemId
+        	m.ViewController.InitializeOtherScreen(newScreen, [item.Title, "People"])
+		newScreen.Show()
+        	return true				
             else if buttonCommand = "more" then
                 m.ShowMoreDialog(item)
-
-			' rewster: handle the back button
-			else if buttonCommand = "back" then
-				m.ViewController.PopScreen(m)
-
+	    ' rewster: handle the back button
+	    else if buttonCommand = "back" then
+		m.ViewController.PopScreen(m)
+    	    else if buttonCommand = "removefavorite" then
+		screen.refreshOnActivate = true
+		result = postFavoriteStatus(itemId, false)
+		if result then
+			createDialog("Favorites Changed", item.Title + " has been removed from your favorites.", "OK", true)
+		else
+			createDialog("Favorites Error!", item.Title + " has NOT been removed from your favorites.", "OK", true)
+		end if
+		return true
+	    else if buttonCommand = "markfavorite" then
+		screen.refreshOnActivate = true
+		result = postFavoriteStatus(itemId, true)
+		if result then
+			createDialog("Favorites Changed", item.Title + " has been added to your favorites.", "OK", true)
+		else
+			createDialog("Favorites Error!", item.Title + " has NOT been added to your favorites.", "OK", true)
+		end if
+		return true
             else
                 handled = false
             end if
@@ -509,6 +576,8 @@ Sub createFavoritesDialog(item)
     dlg = createBaseDialog()
     dlg.Title = "Favorites Options"
     dlg.openParentDialog = true
+    seriesName = item.seriesName
+    if seriesName <> invalid and seriesName.len() > 25 then seriesName = left(seriesName,25) + "..."
 
     if item.ParentIndexNumber <> invalid then
       if item.IsFavorite then
@@ -518,9 +587,9 @@ Sub createFavoritesDialog(item)
       end if
     else
       if item.IsFavorite then
-	dlg.SetButton("removefavorite", "Remove this as a Favorite")
+	dlg.SetButton("removefavorite", "Remove as Favorite")
       else
-	dlg.SetButton("markfavorite", "Mark this as a Favorite")
+	dlg.SetButton("markfavorite", "Mark as Favorite")
       end if
     end if
 
@@ -530,8 +599,12 @@ Sub createFavoritesDialog(item)
     'end if
 
     if item.SeriesName <> invalid then
-	dlg.SetButton("markfavoriteseries", "Mark " + tostr(item.SeriesName) + " as a Favorite")
-	dlg.SetButton("removefavoriteseries", "Remove " + tostr(item.SeriesName) + " as a Favorite")
+	sh = getVideoMetadata(item.seriesId)
+	if sh.isFavorite
+		dlg.SetButton("removefavoriteseries", "Remove " + tostr(seriesName) + " as a Favorite")
+	else
+		dlg.SetButton("markfavoriteseries", "Mark " + tostr(seriesName) + " as a Favorite")
+	end if
     end if
 
 	dlg.item = item
@@ -539,75 +612,229 @@ Sub createFavoritesDialog(item)
 
 	dlg.HandleButton = handleFavoritesOptionsButton
 
-    dlg.SetButton("close", "Close this Window")
+    dlg.SetButton("close", "Close This Window")
     dlg.Show()
 End Sub
 
 Function handleFavoritesOptionsButton(command, data) As Boolean
 	item = m.item
 	itemId = item.Id
-	screen = m.parentScreen
+	screen = m
 
     if command = "removefavorite" then
-		'screen.refreshOnActivate = true
-		postFavoriteStatus(itemId, false)
-        return true
+		screen.refreshOnActivate = true
+		m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+		result = postFavoriteStatus(itemId, false)
+		if item.ParentIndexNumber <> invalid
+			text = item.Title + chr(10) + "Season " + tostr(item.ParentIndexNumber) + ", Episode " + tostr(item.IndexNumber) + " of " + item.SeriesName
+		else
+			text = FirstOf(item.Title, "The episode")
+		end if
+		if result then
+			createDialog("Favorites Changed", text + " has been removed from your favorites.", "OK", true)
+		else
+			createDialog("Favorites Error!", text + " has NOT been removed from your favorites.", "OK", true)
+		end if
+		m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+		return true
     else if command = "markfavorite" then
-		'screen.refreshOnActivate = true
-		postFavoriteStatus(itemId, true)
-        return true
+		screen.refreshOnActivate = true
+		m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+		result = postFavoriteStatus(itemId, true)
+		if item.ParentIndexNumber <> invalid
+			text = item.Title + chr(10) + "Season " + tostr(item.ParentIndexNumber) + ", Episode " + tostr(item.IndexNumber) + " of " + item.SeriesName
+		else
+			text = FirstOf(item.Title, "The episode")
+		end if
+		if result then
+			createDialog("Favorites Changed", text + " has been added to your favorites.", "OK", true)
+		else
+			createDialog("Favorites Error!", text + " has NOT been added to your favorites.", "OK", true)
+		end if
+		m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+		return true
     else if command = "removefavoriteseason" then
-		'screen.refreshOnActivate = true
-		postFavoriteStatus(item.SeasonId, false)
-        return true
+		screen.refreshOnActivate = true
+		m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+		result = postFavoriteStatus(item.SeasonId, false)
+		createDialog("Favorites Changed", "Season " + tostr(item.ParentIndexNumber) + " of " + item.SeriesName +  " has been removed from your favorites.", "OK", true)
+		m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+        	return true
     else if command = "markfavoriteseason" then
-		'screen.refreshOnActivate = true
+		screen.refreshOnActivate = true
 		postFavoriteStatus(item.SeasonId, true)
-        return true
+		if result then
+			createDialog("Favorites Changed", "Season " + tostr(item.ParentIndexNumber) + " of " + item.SeriesName + " has been added to your favorites.", "OK", true)
+		else
+			createDialog("Favorites Error!", "Season " + tostr(item.ParentIndexNumber) + " of " + item.SeriesName + " has NOT been added to your favorites.", "OK", true)
+		end if
+		m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+		return true
     else if command = "removefavoriteseries" then
-		'screen.refreshOnActivate = true
-		postFavoriteStatus(item.SeriesId, false)
-        return true
+		screen.refreshOnActivate = true
+		m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+		result = postFavoriteStatus(item.SeriesId, false)
+		if result then
+			createDialog("Favorites Changed", FirstOf(item.SeriesName, "The series") + " has been removed from your favorites.", "OK", true)
+		else
+			createDialog("Favorites Error!", FirstOf(item.SeriesName, "The series") + " has NOT been removed from your favorites.", "OK", true)
+		end if
+		m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+        	return true
     else if command = "markfavoriteseries" then
-		'screen.refreshOnActivate = true
-		postFavoriteStatus(item.SeriesId, true)
-        return true
+		screen.refreshOnActivate = true
+		m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+		result = postFavoriteStatus(item.SeriesId, true)
+		if result then
+			createDialog("Favorites Changed", FirstOf(item.SeriesName, "The series") + " has been added to your favorites.", "OK", true)
+		else
+			createDialog("Favorites Error!", FirstOf(item.SeriesName, "The series") + " has NOT been added to your favorites.", "OK", true)
+		end if
+		m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+        	return true
     else if command = "close" then
 		m.Screen.Close()
-        return true
+		return true
     end if
+    return false
+End Function
+
+Sub createGoToDialog(item)
+
+    dlg = createBaseDialog()
+    dlg.Title = "Go To Options"
+    dlg.openParentDialog = true
+
+    if item.SeriesName <> invalid then
+    	series = item.SeriesName
+    	if series.len() > 25 then series = left(series,25) + "..."
+	dlg.SetButton("series", "-> Go To " + FirstOf(series, "The series"))
+    end if
+    musicstop = FirstOf(GetGlobalVar("musicstop"),"0")
+    if AudioPlayer().Context <> invalid and musicstop = "0"
+	dlg.SetButton("nowplaying", "-> Go To Now Playing")
+    end if
+    dlg.SetButton("home", "-> Go To Home Screen")
+    dlg.SetButton("preferences", "-> Go To Preferences")
+    dlg.SetButton("search", "-> Go To Search Screen")
+    dlg.SetButton("close", "Close This Window")
+    dlg.item = item
+    dlg.parentScreen = m.parentScreen
+    dlg.HandleButton = handleGoToOptionsButton
+    dlg.Show()
+End Sub
+
+Function handleGoToOptionsButton(returned, data) As Boolean
+	item = m.item
+	itemId = item.Id
+	screen = m
+
+    if returned = "nowplaying"
+	m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+	m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+	'screen.refreshOnActivate = true
+        dummyItem = CreateObject("roAssociativeArray")
+        dummyItem.ContentType = "audio"
+        dummyItem.Key = "nowplaying"
+        GetViewController().CreateScreenForItem(dummyItem, invalid, ["Now Playing"])
+	return true
+
+    else if returned = "home"
+	'screen.refreshOnActivate = true
+	while m.ViewController.screens.Count() > 0
+		m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+	end while
+	m.ViewController.CreateHomeScreen()
+	return true
+
+    else if returned = "preferences"
+	m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+	m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+	'screen.refreshOnActivate = true
+        dummyItem = CreateObject("roAssociativeArray")
+        dummyItem.ContentType = "Preferences"
+        dummyItem.Key = "Preferences"
+        GetViewController().CreateScreenForItem(dummyItem, invalid, ["Preferences"])
+	return true
+
+    else if returned = "search"
+	m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+	m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+	'screen.refreshOnActivate = true
+        dummyItem = CreateObject("roAssociativeArray")
+        dummyItem.ContentType = "Search"
+        dummyItem.Key = "Search"
+        GetViewController().CreateScreenForItem(dummyItem, invalid, ["Search"])
+        return true
+
+    else if returned = "series"
+	m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+	m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+	'screen.refreshOnActivate = true
+	series = getVideoMetadata(m.item.seriesId)
+	series.ContentType = "Series"
+	series.MediaType = "Series"
+        GetViewController().CreateScreenForItem([series], 0, ["Shows", Series.Title])
+        return true
+
+    else if returned = "close"
+	m.Screen.Close()
+    end if
+
     return false
 End Function
 
 Sub springboardShowMoreDialog(item)
     dlg = createBaseDialog()
     dlg.Title = "More Options"
+    DeleteAll = firstOf(RegRead("prefDelAll"), "1")
 
 	if item.MediaType = "Video" or item.MediaType = "Game" then 
-		if item.Watched
-			dlg.SetButton("markunplayed", "Mark this as Unplayed")
+
+		if item.MediaType = "Video" and item.BookmarkPosition <> 0 then
+			time = tostr(formatTime(item.BookmarkPosition))
+			dlg.SetButton("markplayed", "Clear the Resume Point of " + time)
+		else if item.Watched
+			dlg.SetButton("markunplayed", "Mark as Unplayed")
 		else
-			dlg.SetButton("markplayed", "Mark this as Played")
+			dlg.SetButton("markplayed", "Mark as Played")
 		end if
 	end if
+	'if item.MediaType = "Video" and item.BookmarkPosition <> 0 then
+	'	time = tostr(formatTime(item.BookmarkPosition))
+	'	dlg.SetButton("markplayed", "Clear Resume point of " + time)
+	'end if
     if item.SeriesName <> invalid then
     	dlg.SetButton("favorites", "Change Favorites")
-    else
+    else if item.ContentType <> "Person"
 	if item.IsFavorite
-		dlg.SetButton("removefavorite", "Remove this as a Favorite")
+		dlg.SetButton("removefavorite", "Remove as Favorite")
 	else
-		dlg.SetButton("markfavorite", "Mark this as a Favorite")
+		dlg.SetButton("markfavorite", "Mark as Favorite")
 	end if
     end if
 
-    ' Check for special features
+    ' delete
+    if item.CanDelete and DeleteAll = "1" Then
+        dlg.SetButton("delete", "Delete Item")
+    end if
+
+    ' Check for people
     if item.People <> invalid and item.People.Count() > 0
 
-		if item.MediaType = "Video" then
+	if item.MediaType = "Video" then
+		if item.LocalTrailerCount <> invalid and item.LocalTrailerCount > 0
 			dlg.SetButton("cast", "Cast & Crew")
-		else
-			dlg.SetButton("people", "People")
-		end If
+		end if
+	else
+		dlg.SetButton("people", "People")
+	end If
+    end if
+   if item.SeriesName <> invalid then
+	sh = getVideoMetadata(item.seriesId)
+	if sh.People <> invalid and sh.People.Count() > 0
+		dlg.SetButton("maincast", "Main Cast & Crew")
+	end if
     end if
 
     ' Check for special features
@@ -620,8 +847,11 @@ Sub springboardShowMoreDialog(item)
 
 	dlg.HandleButton = handleMoreOptionsButton
 
+	dlg.SetButton("goto", "-> Go To ...")
+
 	if (item.LocationType <> "Virtual" or item.ContentType = "TvChannel") And item.PlayAccess = "Full" and item.MediaType = "Video" then
 		force = FirstOf(regRead("prefPlayMethod"),"Auto")
+		private = FirstOf(regRead("prefprivate"),"0")
 		if force <> "DirectPlay" then 
 			dlg.SetButton("DirectPlay", "* Force DirectPlay")
 		else
@@ -640,13 +870,19 @@ Sub springboardShowMoreDialog(item)
 			dlg.SetButton("Transcode", "* Force Transcode [Selected]")
 		end if
 
-		if force <> "Auto" then 
-			dlg.SetButton("Auto", "* Use Auto-Detection")
-		else
+		if force = "Auto" and private = "0" then 
 			dlg.SetButton("Auto", "* Use Auto-Detection [Selected]")
+		else
+			dlg.SetButton("Auto", "* Use Auto-Detection")
+		end if
+
+		if force = "Auto" and private = "1" then 
+			dlg.SetButton("Auto2", "* Use Auto-Detection Private [Selected]")
+		else 
+			dlg.SetButton("Auto2", "* Use Auto-Detection Private")
 		end if
 	end if
-    dlg.SetButton("close", "Close this Window")
+    dlg.SetButton("close", "Close This Window")
     dlg.Show()
 
 End Sub
@@ -658,49 +894,101 @@ Function handleMoreOptionsButton(command, data) As Boolean
 	screen = m.parentScreen
 
     if command = "favorites" then
-                createFavoritesDialog(item)
-    else if command = "markunplayed" then
-		screen.refreshOnActivate = true
-		postWatchedStatus(itemId, false)
-        return true
-    else if command = "markfavorite" then
-		screen.refreshOnActivate = true
-		postFavoriteStatus(itemId, true)
-        return true
-    else if command = "removefavorite" then
-		screen.refreshOnActivate = true
-		postFavoriteStatus(itemId, false)
-        return true
-    else if command = "markplayed" then
-		screen.refreshOnActivate = true
-		postWatchedStatus(itemId, true)
-        return true
-    else if command = "specials" then
-        newScreen = createSpecialFeaturesScreen(m.ViewController, item)
-		newScreen.ScreenName = "Chapters" + itemId
-        m.ViewController.InitializeOtherScreen(newScreen, [item.Title, "Special Features"])
-		newScreen.Show()
-        return true
+	screen.refreshOnActivate = true
+	createFavoritesDialog(item)
+
+    else if command = "goto" then
+	screen.refreshOnActivate = true
+	createGoToDialog(item)
+
     else if command = "cast" then
         newScreen = createPeopleScreen(m.ViewController, item)
-		newScreen.ScreenName = "People" + itemId
+	newScreen.ScreenName = "People" + itemId
         m.ViewController.InitializeOtherScreen(newScreen, [item.Title, "Cast & Crew"])
-		newScreen.Show()
+	newScreen.Show()
+        return true
+    else if command = "maincast" then
+	series = getVideoMetadata(m.item.seriesId)
+        newScreen = createPeopleScreen(m.ViewController, series)
+	newScreen.ScreenName = "People" + itemId
+        m.ViewController.InitializeOtherScreen(newScreen, [item.Title, "Cast & Crew"])
+	newScreen.Show()
         return true
     else if command = "people" then
-        newScreen = createPeopleScreen(m.ViewController, item)
-		newScreen.ScreenName = "People" + itemId
-        m.ViewController.InitializeOtherScreen(newScreen, [item.Title, "People"])
-		newScreen.Show()
+	newScreen = createPeopleScreen(m.ViewController, item)
+	newScreen.ScreenName = "People" + itemId
+	m.ViewController.InitializeOtherScreen(newScreen, [item.Title, "People"])
+	newScreen.Show()
+	return true
+    else if command = "markunplayed" then
+	screen.refreshOnActivate = true
+	postWatchedStatus(itemId, false)
+	return true
+    else if command = "markfavorite" then
+	screen.refreshOnActivate = true
+	result = postFavoriteStatus(itemId, true)
+	if item.ParentIndexNumber <> invalid
+		text = item.Title + chr(10) + "Season " + tostr(item.ParentIndexNumber) + ", Episode " + tostr(item.IndexNumber) + " of " + item.SeriesName
+	else
+		text = FirstOf(item.Title, "The item")
+	end if
+	if result then
+		createDialog("Favorites Changed", text + " has been added to your favorites.", "OK", true)
+	else
+		createDialog("Favorites Error!", text + " has NOT been added to your favorites.", "OK", true)
+	end if
         return true
+    else if command = "removefavorite" then
+	screen.refreshOnActivate = true
+	result = postFavoriteStatus(itemId, false)
+	if item.ParentIndexNumber <> invalid
+		text = item.Title + chr(10) + "Season " + tostr(item.ParentIndexNumber) + ", Episode " + tostr(item.IndexNumber) + " of " + item.SeriesName
+	else
+		text = FirstOf(item.Title, "The item")
+	end if
+	if result then
+		createDialog("Favorites Changed", text + " has been removed from your favorites.", "OK", true)
+	else
+		createDialog("Favorites Error!", text + " has NOT been removed from your favorites.", "OK", true)
+	end if
+        return true
+    else if command = "markplayed" then
+	screen.refreshOnActivate = true
+	postWatchedStatus(itemId, true)
+	return true
+    else if command = "specials" then
+        newScreen = createSpecialFeaturesScreen(m.ViewController, item)
+	newScreen.ScreenName = "Chapters" + itemId
+	m.ViewController.InitializeOtherScreen(newScreen, [item.Title, "Special Features"])
+	newScreen.Show()
+	return true
+    else if command = "delete" then
+	springboardDeleteItem(item)
+	m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+	return true
     else if command = "DirectPlay" or command = "DirectStream" or command = "Transcode" or command = "Auto" then
-		regWrite("prefPlayMethod",command)
-		getDeviceProfile()
-		m.Screen.Close()
-		screen.refreshOnActivate = true
+	regWrite("prefPlayMethod",command)
+	regwrite("prefprivate", "0")
+	getDeviceProfile()
+	m.Screen.Close()
+	screen.refreshOnActivate = true
+	return true
+    else if command = "Auto2" then
+	regWrite("prefPlayMethod","Auto")
+	regwrite("prefprivate", "1")
+	getDeviceProfile()
+	m.Screen.Close()
+	screen.refreshOnActivate = true
+	return true
+    else if command = "homescreen"
+	while m.ViewController.screens.Count() > 0
+		m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
+	end while
+	m.ViewController.CreateHomeScreen()
+	return true
     else if command = "close" then
-		m.Screen.Close()
-        return true
+	m.Screen.Close()
+	return true
     end if
 	
     return false
@@ -734,7 +1022,7 @@ Sub createAudioAndSubtitleDialog(audioStreams, subtitleStreams, playOptions)
 
 		dlg.SetButton("audio", "Audio")
 		dlg.SetButton("subtitles", "Subtitles")
-		dlg.SetButton("close", "Close this Window")
+		dlg.SetButton("close", "Close This Window")
 
 		dlg.Show(true)
 
@@ -805,7 +1093,7 @@ Sub createStreamSelectionDialog(streamType, audioStreams, subtitleStreams, playO
 
 	end For
 
-    dlg.SetButton("close", "Close this Window")
+    dlg.SetButton("close", "Close This Window")
     dlg.Show(true)
 End Sub
 
@@ -860,18 +1148,18 @@ End Function
 ' Delete Recording Dialog
 '******************************************************
 
-Function showDeleteRecordingDialog()
-	return showContextViewMenuYesNoDialog("Confirm Action", "Are you sure you wish to permanently delete this item?")
+Function showDeleteRecordingDialog(item)
+	return showContextViewMenuYesNoDialog("Confirm Action", "Are you sure you wish to permanently delete " +item.Title+" from your library?")
 End Function
 
-Sub springboardDeleteRecording (item)
-	if showDeleteRecordingDialog() = "1" then
-        	deleteLiveTvRecording(item.ContentType, item.Id)
-		m.Screen.Close()
+Sub springboardDeleteItem(item)
+	if showDeleteRecordingDialog(item) = "1" then
+        	deleteLiveTvRecording(item)
+		m.ViewController.PopScreen(m.ViewController.screens[m.ViewController.screens.Count() - 1])
 	end if
 End Sub
 
-Sub springboardCancelTimer (item)
+Sub springboardCancelTimer(item)
 	m.refreshOnActivate = true
 
 	if showCancelLiveTvTimerDialog() = "1" then

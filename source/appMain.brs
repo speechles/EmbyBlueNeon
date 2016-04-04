@@ -14,9 +14,9 @@ Sub Main()
     viewController = createViewController()
 	
 	' Uncomment this as needed to debug startup sequence
-	RegDelete("activeServerId")
-	RegDelete("serverList1")
-	RegDelete("userId")
+	'RegDelete("activeServerId")
+	'RegDelete("serverList1")
+	'RegDelete("userId")
 	
 	'RunScreenSaver()
 	viewController.Show()
@@ -54,6 +54,7 @@ Sub initGlobals()
 
     GetGlobalAA().AddReplace("rokuVersion", [major, minor, build])
     regWrite("prefPlayMethod", "Auto")
+    regWrite("prefprivate", "0")
     ' Get channel version
     manifest = ReadAsciiFile("pkg:/manifest")
     lines = manifest.Tokenize(chr(10))
@@ -70,11 +71,10 @@ Sub initGlobals()
 
     GetGlobalAA().AddReplace("rokuUniqueId", device.GetDeviceUniqueId())
 
-    If major >= 6 and minor >= 1 Then
-	di = CreateObject("roDeviceInfo")
-	audioDecoders = di.GetAudioDecodeInfo()
-        modelName   = di.GetModelDisplayName()
-        modelNumber = di.GetModel()
+    If (major >= 6 and minor >= 1) or major >= 7 Then
+	audioDecoders = device.GetAudioDecodeInfo()
+        modelName   = device.GetModelDisplayName()
+        modelNumber = device.GetModel()
  
 	' Check for surround sound codecs:
 	hasDolbyDigital = audioDecoders.doesexist("AC3")
